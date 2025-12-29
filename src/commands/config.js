@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { getConfig, setConfig, clearConfig } from '../config.js';
+import { getConfig, setConfig, clearConfig, getApiKey, setApiKey } from '../config.js';
+import { SiloWorkerAPI } from '../api.js';
 
 export const configCommand = new Command('config')
   .description('Configuration management commands');
@@ -80,4 +81,27 @@ configCommand
     
     clearConfig();
     console.log(chalk.green('✓ Configuration reset'));
+  });
+
+configCommand
+  .command('regenerate-key')
+  .description('Regenerate API key')
+  .action(async () => {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      console.error(chalk.red('Error: Not authenticated. Run "siloworker auth login" first.'));
+      process.exit(1);
+    }
+    
+    const api = new SiloWorkerAPI(apiKey);
+    
+    try {
+      const result = await api.post('/v1/workspace/regenerate-key');
+      setApiKey(result.api_key);
+      console.log(chalk.green('✓ API key regenerated'));
+      console.log(chalk.blue(`New key: ${result.api_key.substring(0, 12)}...`));
+    } catch (error) {
+      console.error(chalk.red(`Failed to regenerate API key: ${error.message}`));
+      process.exit(1);
+    }
   });

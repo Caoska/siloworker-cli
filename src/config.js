@@ -35,6 +35,10 @@ export function getApiKey() {
   return config.apiKey;
 }
 
+export function setApiKey(apiKey) {
+  setConfig('apiKey', apiKey);
+}
+
 export function getConfig(key) {
   const config = loadConfig();
   return key ? config[key] : config;

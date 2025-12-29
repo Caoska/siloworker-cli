@@ -104,7 +104,8 @@ runCommand
         console.log(`\nSteps completed: ${run.results.steps.length}`);
         run.results.steps.forEach((step, i) => {
           const stepStatus = step.status === 'success' ? chalk.green('✓') : chalk.red('✗');
-          console.log(`  ${stepStatus} ${step.config?.name || step.type} (${step.duration_ms}ms)`);
+          const stepId = step.node_id || `step_${i}`;
+          console.log(`  ${stepStatus} ${stepId}: ${step.config?.name || step.type} (${step.duration_ms}ms)`);
         });
       }
     } catch (error) {
@@ -115,7 +116,7 @@ runCommand
 runCommand
   .command('resume <runId>')
   .description('Resume a failed run')
-  .option('--from-step <stepIndex>', 'Resume from specific step number (0-based)')
+  .option('--from-step <stepId>', 'Resume from specific step ID (re-executes that step and all following steps)')
   .action(async (runId, options) => {
     const apiKey = checkAuth();
     
@@ -136,38 +137,35 @@ runCommand
       }
       
       const resumeData = {};
-      if (options.fromStep !== undefined) {
-        const stepIndex = parseInt(options.fromStep);
-        if (isNaN(stepIndex) || stepIndex < 0) {
-          console.error(chalk.red('Error: Step index must be a non-negative number'));
+      if (options.fromStep) {
+        // Validate that the step ID exists in the completed steps
+        const completedSteps = run.results?.steps || [];
+        const stepExists = completedSteps.some(step => step.node_id === options.fromStep);
+        
+        if (!stepExists) {
+          console.error(chalk.red(`Error: Step ID "${options.fromStep}" not found in completed steps`));
+          if (completedSteps.length > 0) {
+            console.log(chalk.blue('Available step IDs:'));
+            completedSteps.forEach(step => {
+              const stepId = step.node_id || 'unknown';
+              const stepName = step.config?.name || step.type;
+              console.log(`  ${stepId}: ${stepName}`);
+            });
+          }
           return;
         }
         
-        if (run.results?.steps && stepIndex >= run.results.steps.length) {
-          console.error(chalk.red(`Error: Step index ${stepIndex} exceeds completed steps (${run.results.steps.length})`));
-          return;
-        }
-        
-        resumeData.from_step = stepIndex;
-        console.log(chalk.blue(`Resuming from step ${stepIndex}...`));
+        resumeData.from_step = options.fromStep;
+        console.log(chalk.blue(`Resuming from step "${options.fromStep}"...`));
       }
       
-      await api.post(`/v1/runs/${runId}/resume`, resumeData);
+      const result = await api.post(`/v1/runs/${runId}/resume`, resumeData);
       console.log(chalk.green('✓ Run resumed'));
-    } catch (error) {
-      if (error.message.includes('from_step not supported')) {
-        console.error(chalk.yellow('⚠️  Step-level resume not yet supported by API'));
-        console.log(chalk.blue('Falling back to full run resume...'));
-        
-        try {
-          await api.post(`/v1/runs/${runId}/resume`);
-          console.log(chalk.green('✓ Run resumed from beginning'));
-        } catch (fallbackError) {
-          console.error(chalk.red(`Failed to resume run: ${fallbackError.message}`));
-        }
-      } else {
-        console.error(chalk.red(`Failed to resume run: ${error.message}`));
+      if (result.run_id) {
+        console.log(chalk.blue(`New run ID: ${result.run_id}`));
       }
+    } catch (error) {
+      console.error(chalk.red(`Failed to resume run: ${error.message}`));
     }
   });
 

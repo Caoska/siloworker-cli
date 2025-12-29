@@ -8,6 +8,8 @@ import { workspaceCommand } from '../src/commands/workspace.js';
 import { projectCommand } from '../src/commands/project.js';
 import { scheduleCommand } from '../src/commands/schedule.js';
 import { configCommand } from '../src/commands/config.js';
+import { templateCommand } from '../src/commands/template.js';
+import { toolsCommand } from '../src/commands/tools.js';
 
 program
   .name('siloworker')
@@ -32,5 +34,7 @@ program.addCommand(workspaceCommand);
 program.addCommand(projectCommand);
 program.addCommand(scheduleCommand);
 program.addCommand(configCommand);
+program.addCommand(templateCommand);
+program.addCommand(toolsCommand);
 
 program.parse();
