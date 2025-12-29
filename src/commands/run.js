@@ -115,7 +115,8 @@ runCommand
 runCommand
   .command('resume <runId>')
   .description('Resume a failed run')
-  .action(async (runId) => {
+  .option('--from-step <stepIndex>', 'Resume from specific step number (0-based)')
+  .action(async (runId, options) => {
     const apiKey = checkAuth();
     
     const runError = validateRunId(runId);
@@ -134,10 +135,39 @@ runCommand
         return;
       }
       
-      await api.post(`/v1/runs/${runId}/resume`);
+      const resumeData = {};
+      if (options.fromStep !== undefined) {
+        const stepIndex = parseInt(options.fromStep);
+        if (isNaN(stepIndex) || stepIndex < 0) {
+          console.error(chalk.red('Error: Step index must be a non-negative number'));
+          return;
+        }
+        
+        if (run.results?.steps && stepIndex >= run.results.steps.length) {
+          console.error(chalk.red(`Error: Step index ${stepIndex} exceeds completed steps (${run.results.steps.length})`));
+          return;
+        }
+        
+        resumeData.from_step = stepIndex;
+        console.log(chalk.blue(`Resuming from step ${stepIndex}...`));
+      }
+      
+      await api.post(`/v1/runs/${runId}/resume`, resumeData);
       console.log(chalk.green('✓ Run resumed'));
     } catch (error) {
-      console.error(chalk.red(`Failed to resume run: ${error.message}`));
+      if (error.message.includes('from_step not supported')) {
+        console.error(chalk.yellow('⚠️  Step-level resume not yet supported by API'));
+        console.log(chalk.blue('Falling back to full run resume...'));
+        
+        try {
+          await api.post(`/v1/runs/${runId}/resume`);
+          console.log(chalk.green('✓ Run resumed from beginning'));
+        } catch (fallbackError) {
+          console.error(chalk.red(`Failed to resume run: ${fallbackError.message}`));
+        }
+      } else {
+        console.error(chalk.red(`Failed to resume run: ${error.message}`));
+      }
     }
   });
 
