@@ -1,0 +1,34 @@
+{
+  "name": "siloworker-cli",
+  "version": "1.0.0",
+  "description": "CLI for SiloWorker workflow automation platform",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "siloworker": "./bin/cli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install-global": "npm install -g .",
+    "uninstall-global": "npm uninstall -g siloworker-cli"
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+    "node-fetch": "^3.3.2",
+    "chalk": "^5.3.0"
+  },
+  "keywords": ["workflow", "automation", "cli", "siloworker"],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/siloworker-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/siloworker-cli/issues"
+  },
+  "homepage": "https://github.com/yourusername/siloworker-cli#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
