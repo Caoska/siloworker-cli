@@ -1,6 +1,6 @@
 {
   "name": "siloworker-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI for SiloWorker workflow automation platform",
   "main": "index.js",
   "type": "module",
@@ -23,7 +23,12 @@
     "src/",
     "README.md"
   ],
-  "keywords": ["workflow", "automation", "cli", "siloworker"],
+  "keywords": [
+    "workflow",
+    "automation",
+    "cli",
+    "siloworker"
+  ],
   "author": "",
   "license": "MIT",
   "repository": {
