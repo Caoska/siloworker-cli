@@ -6,36 +6,109 @@ import { getApiKey } from '../config.js';
 export const runCommand = new Command('run')
   .description('Run management commands');
 
+function checkAuth() {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    console.error(chalk.red('Error: Not authenticated. Run "siloworker auth login" first.'));
+    process.exit(1);
+  }
+  return apiKey;
+}
+
+function validateAgentId(agentId) {
+  if (!agentId || !agentId.startsWith('agent_')) {
+    return 'Agent ID must start with "agent_"';
+  }
+  return null;
+}
+
+function validateRunId(runId) {
+  if (!runId || !runId.startsWith('run_')) {
+    return 'Run ID must start with "run_"';
+  }
+  return null;
+}
+
 runCommand
   .command('start <agentId>')
   .description('Start a workflow run')
   .option('-d, --data <data>', 'Input data as JSON string', '{}')
   .action(async (agentId, options) => {
-    const api = new SiloWorkerAPI(getApiKey());
+    const apiKey = checkAuth();
+    
+    const agentError = validateAgentId(agentId);
+    if (agentError) {
+      console.error(chalk.red(`Error: ${agentError}`));
+      return;
+    }
     
     let inputData = {};
     try {
       inputData = JSON.parse(options.data);
     } catch (error) {
-      console.error(chalk.red('Invalid JSON data'));
+      console.error(chalk.red('Error: Invalid JSON data format'));
+      console.log(chalk.yellow('Example: \'{"key": "value"}\''));
       return;
     }
     
-    const run = await api.post(`/v1/agents/${agentId}/run`, inputData);
-    console.log(chalk.green(`✓ Started run: ${run.id}`));
+    const api = new SiloWorkerAPI(apiKey);
+    
+    try {
+      const run = await api.post(`/v1/runs`, { agent_id: agentId, input: inputData });
+      
+      if (!run.run_id) {
+        console.error(chalk.red('Error: No run ID received from server'));
+        return;
+      }
+      
+      console.log(chalk.green(`✓ Started run: ${run.run_id}`));
+      console.log(chalk.blue(`  Status: ${run.status}`));
+      console.log(chalk.gray(`  Use "siloworker run status ${run.run_id}" to check progress`));
+    } catch (error) {
+      console.error(chalk.red(`Failed to start run: ${error.message}`));
+    }
   });
 
 runCommand
   .command('status <runId>')
   .description('Get run status')
   .action(async (runId) => {
-    const api = new SiloWorkerAPI(getApiKey());
-    const run = await api.get(`/v1/runs/${runId}`);
+    const apiKey = checkAuth();
     
-    console.log(`Status: ${chalk.blue(run.status)}`);
-    console.log(`Progress: ${run.current_step}/${run.total_steps}`);
-    if (run.error) {
-      console.log(`Error: ${chalk.red(run.error)}`);
+    const runError = validateRunId(runId);
+    if (runError) {
+      console.error(chalk.red(`Error: ${runError}`));
+      return;
+    }
+    
+    const api = new SiloWorkerAPI(apiKey);
+    
+    try {
+      const run = await api.get(`/v1/runs/${runId}`);
+      
+      const statusColor = run.status === 'completed' ? chalk.green : 
+                         run.status === 'failed' ? chalk.red : 
+                         chalk.yellow;
+      
+      console.log(`Status: ${statusColor(run.status)}`);
+      console.log(`Agent: ${run.agent_id}`);
+      console.log(`Created: ${run.created_at}`);
+      if (run.started_at) console.log(`Started: ${run.started_at}`);
+      if (run.completed_at) console.log(`Completed: ${run.completed_at}`);
+      
+      if (run.error) {
+        console.log(`Error: ${chalk.red(run.error)}`);
+      }
+      
+      if (run.results?.steps?.length > 0) {
+        console.log(`\nSteps completed: ${run.results.steps.length}`);
+        run.results.steps.forEach((step, i) => {
+          const stepStatus = step.status === 'success' ? chalk.green('✓') : chalk.red('✗');
+          console.log(`  ${stepStatus} ${step.config?.name || step.type} (${step.duration_ms}ms)`);
+        });
+      }
+    } catch (error) {
+      console.error(chalk.red(`Failed to get run status: ${error.message}`));
     }
   });
 
@@ -43,9 +116,29 @@ runCommand
   .command('resume <runId>')
   .description('Resume a failed run')
   .action(async (runId) => {
-    const api = new SiloWorkerAPI(getApiKey());
-    await api.post(`/v1/runs/${runId}/resume`);
-    console.log(chalk.green('✓ Run resumed'));
+    const apiKey = checkAuth();
+    
+    const runError = validateRunId(runId);
+    if (runError) {
+      console.error(chalk.red(`Error: ${runError}`));
+      return;
+    }
+    
+    const api = new SiloWorkerAPI(apiKey);
+    
+    try {
+      // Check if run can be resumed
+      const run = await api.get(`/v1/runs/${runId}`);
+      if (run.status !== 'failed') {
+        console.error(chalk.red(`Error: Run is ${run.status}, can only resume failed runs`));
+        return;
+      }
+      
+      await api.post(`/v1/runs/${runId}/resume`);
+      console.log(chalk.green('✓ Run resumed'));
+    } catch (error) {
+      console.error(chalk.red(`Failed to resume run: ${error.message}`));
+    }
   });
 
 runCommand
@@ -60,7 +153,7 @@ runCommand
       const status = run.status === 'completed' ? chalk.green(run.status) : 
                     run.status === 'failed' ? chalk.red(run.status) : 
                     chalk.yellow(run.status);
-      console.log(`${run.id} - ${status} - ${run.agent_name}`);
+      console.log(`${run.run_id} - ${status} - ${run.agent_id}`);
     });
   });
 
@@ -70,7 +163,8 @@ runCommand
   .option('--dry-run', 'Show what would be resumed without actually doing it')
   .action(async (options) => {
     const api = new SiloWorkerAPI(getApiKey());
-    const runs = await api.get('/v1/runs?status=failed');
+    const allRuns = await api.get('/v1/runs?limit=100');
+    const runs = allRuns.filter(run => run.status === 'failed');
     
     if (runs.length === 0) {
       console.log(chalk.yellow('No failed runs found'));
@@ -81,7 +175,7 @@ runCommand
     
     if (options.dryRun) {
       runs.forEach(run => {
-        console.log(`Would resume: ${run.id} - ${run.agent_name}`);
+        console.log(`Would resume: ${run.run_id} - ${run.agent_id}`);
       });
       return;
     }
@@ -89,11 +183,11 @@ runCommand
     let resumed = 0;
     for (const run of runs) {
       try {
-        await api.post(`/v1/runs/${run.id}/resume`);
-        console.log(chalk.green(`✓ Resumed ${run.id}`));
+        await api.post(`/v1/runs/${run.run_id}/resume`);
+        console.log(chalk.green(`✓ Resumed ${run.run_id}`));
         resumed++;
       } catch (error) {
-        console.log(chalk.red(`✗ Failed to resume ${run.id}: ${error.message}`));
+        console.log(chalk.red(`✗ Failed to resume ${run.run_id}: ${error.message}`));
       }
     }
     
@@ -106,7 +200,8 @@ runCommand
   .option('--dry-run', 'Show what would be cancelled without actually doing it')
   .action(async (options) => {
     const api = new SiloWorkerAPI(getApiKey());
-    const runs = await api.get('/v1/runs?status=running');
+    const allRuns = await api.get('/v1/runs?limit=100');
+    const runs = allRuns.filter(run => run.status === 'running');
     
     if (runs.length === 0) {
       console.log(chalk.yellow('No running runs found'));
@@ -117,7 +212,7 @@ runCommand
     
     if (options.dryRun) {
       runs.forEach(run => {
-        console.log(`Would cancel: ${run.id} - ${run.agent_name}`);
+        console.log(`Would cancel: ${run.run_id} - ${run.agent_id}`);
       });
       return;
     }
@@ -125,11 +220,11 @@ runCommand
     let cancelled = 0;
     for (const run of runs) {
       try {
-        await api.post(`/v1/runs/${run.id}/cancel`);
-        console.log(chalk.green(`✓ Cancelled ${run.id}`));
+        await api.post(`/v1/runs/${run.run_id}/cancel`);
+        console.log(chalk.green(`✓ Cancelled ${run.run_id}`));
         cancelled++;
       } catch (error) {
-        console.log(chalk.red(`✗ Failed to cancel ${run.id}: ${error.message}`));
+        console.log(chalk.red(`✗ Failed to cancel ${run.run_id}: ${error.message}`));
       }
     }
     
@@ -157,7 +252,7 @@ runCommand
     
     if (options.dryRun) {
       runs.forEach(run => {
-        console.log(`Would delete: ${run.id} - ${run.agent_name} (${run.completed_at})`);
+        console.log(`Would delete: ${run.run_id} - ${run.agent_id} (${run.completed_at})`);
       });
       return;
     }
@@ -165,11 +260,11 @@ runCommand
     let deleted = 0;
     for (const run of runs) {
       try {
-        await api.delete(`/v1/runs/${run.id}`);
-        console.log(chalk.green(`✓ Deleted ${run.id}`));
+        await api.delete(`/v1/runs/${run.run_id}`);
+        console.log(chalk.green(`✓ Deleted ${run.run_id}`));
         deleted++;
       } catch (error) {
-        console.log(chalk.red(`✗ Failed to delete ${run.id}: ${error.message}`));
+        console.log(chalk.red(`✗ Failed to delete ${run.run_id}: ${error.message}`));
       }
     }
     

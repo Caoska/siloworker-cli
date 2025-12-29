@@ -8,7 +8,8 @@
     "siloworker": "./bin/cli.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node test/test.js",
+    "test:watch": "nodemon test/test.js",
     "install-global": "npm install -g .",
     "uninstall-global": "npm uninstall -g siloworker-cli"
   },
@@ -17,6 +18,11 @@
     "node-fetch": "^3.3.2",
     "chalk": "^5.3.0"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ],
   "keywords": ["workflow", "automation", "cli", "siloworker"],
   "author": "",
   "license": "MIT",

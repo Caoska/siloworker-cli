@@ -7,23 +7,11 @@ import { runCommand } from '../src/commands/run.js';
 import { workspaceCommand } from '../src/commands/workspace.js';
 import { projectCommand } from '../src/commands/project.js';
 import { scheduleCommand } from '../src/commands/schedule.js';
-import { configCommand } from '../src/commands/config.js';
 
 program
   .name('siloworker')
   .description('CLI for SiloWorker workflow automation')
-  .version('1.0.0')
-  .option('--verbose', 'Enable verbose logging')
-  .option('--debug', 'Enable debug mode')
-  .option('--api-url <url>', 'Override API URL', 'https://api.siloworker.dev');
-
-// Set global options
-program.hook('preAction', (thisCommand, actionCommand) => {
-  const opts = thisCommand.opts();
-  process.env.SILOWORKER_VERBOSE = opts.verbose ? 'true' : 'false';
-  process.env.SILOWORKER_DEBUG = opts.debug ? 'true' : 'false';
-  process.env.SILOWORKER_API_URL = opts.apiUrl;
-});
+  .version('1.0.0');
 
 program.addCommand(authCommand);
 program.addCommand(agentCommand);
@@ -31,6 +19,5 @@ program.addCommand(runCommand);
 program.addCommand(workspaceCommand);
 program.addCommand(projectCommand);
 program.addCommand(scheduleCommand);
-program.addCommand(configCommand);
 
 program.parse();
